@@ -7,7 +7,7 @@ I'm a Mid-level Web Developer, super passionate about programming, and currently
 
 ### <img width="30" alt="more about me" src="https://user-images.githubusercontent.com/74683074/219888544-31f86183-7ab0-4356-84e0-2ccf6996edf8.png"> More about me:
 - 🌌 I'm a big fan of astronomy and physics.
-- 🔭 I'm currently working as a Back-end Developer at VersaTec.
+- 🔭 I'm currently working as a Back-end Developer at Gupy.
 - 💻 I'm currently working with PHP, Laravel, Vue.js, Docker, and PostgreSQL...
 - 🌱 I'm currently learning more about Node.js, Nest.js, and Typescript.
 - 💬 Ask me about anything, I'm happy to help.
