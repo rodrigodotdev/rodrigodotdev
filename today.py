@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""Fill dark_mode.svg and light_mode.svg with live GitHub stats.
+
+Environment:
+  ACCESS_TOKEN  fine-grained PAT — all repositories, Contents + Metadata (read),
+                account Followers (read)
+  USER_NAME     GitHub login to build the card for
+"""
+import datetime
+import hashlib
+import os
+import sys
+import time
+from collections import Counter
+from dataclasses import dataclass
+
+import requests
+from dateutil import relativedelta
+from lxml import etree
+
+BIRTHDAY = datetime.datetime(2001, 9, 11)
+GRAPHQL_URL = 'https://api.github.com/graphql'
+SVG_FILES = ('dark_mode.svg', 'light_mode.svg')
+CACHE_DIR = 'cache'
+ALL_AFFILIATIONS = ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER']
+
+
+# ---------- uptime ----------
+
+def plural(n):
+    return '' if n == 1 else 's'
+
+
+def uptime(birthday, today=None):
+    """'X years, X months, X days' since birthday, plus a cake on the birthday itself."""
+    today = today or datetime.datetime.today()
+    diff = relativedelta.relativedelta(today, birthday)
+    cake = ' 🎂' if diff.months == 0 and diff.days == 0 else ''
+    return (f'{diff.years} year{plural(diff.years)}, '
+            f'{diff.months} month{plural(diff.months)}, '
+            f'{diff.days} day{plural(diff.days)}{cake}')
