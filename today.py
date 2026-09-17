@@ -39,3 +39,42 @@ def uptime(birthday, today=None):
     return (f'{diff.years} year{plural(diff.years)}, '
             f'{diff.months} month{plural(diff.months)}, '
             f'{diff.days} day{plural(diff.days)}{cake}')
+
+
+# ---------- svg ----------
+
+def leader(just_len):
+    """Dotted leader padding a value to its reserved width."""
+    if just_len <= 0:
+        return ''
+    if just_len == 1:
+        return ' '
+    if just_len == 2:
+        return '. '
+    return ' ' + '.' * just_len + ' '
+
+
+def format_value(value):
+    return f'{value:,}' if isinstance(value, int) else str(value)
+
+
+def justify(root, element_id, value, length=0):
+    """Set #element_id's text and resize #element_id_dots so the value stays right-aligned."""
+    text = format_value(value)
+    _set_text(root, element_id, text)
+    _set_text(root, f'{element_id}_dots', leader(length - len(text)))
+
+
+def _set_text(root, element_id, text):
+    element = root.find(f".//*[@id='{element_id}']")
+    if element is not None:
+        element.text = text
+
+
+def update_svg(path, values):
+    """values: {element_id: (value, reserved_length)} — see RESERVED."""
+    tree = etree.parse(path)
+    root = tree.getroot()
+    for element_id, (value, length) in values.items():
+        justify(root, element_id, value, length)
+    tree.write(path, encoding='utf-8', xml_declaration=True)
