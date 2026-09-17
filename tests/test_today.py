@@ -61,7 +61,7 @@ def test_update_svg_sets_values_and_leaders(tmp_path):
 def repo(name, commits):
     return {
         'nameWithOwner': name,
-        'stargazers': {'totalCount': 0},
+        'stargazerCount': 0,
         'defaultBranchRef': {'target': {'history': {'totalCount': commits}}} if commits else None,
     }
 

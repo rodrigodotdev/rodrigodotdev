@@ -234,7 +234,7 @@ class GitHubApi:
                 repositories(first: 60, after: $cursor, ownerAffiliations: $affiliations) {
                     nodes {
                         nameWithOwner
-                        stargazers { totalCount }
+                        stargazerCount
                         defaultBranchRef { target { ... on Commit { history { totalCount } } } }
                     }
                     pageInfo { endCursor hasNextPage }
@@ -303,7 +303,7 @@ def main():
         'age_data': uptime(BIRTHDAY),
         'repo_data': len(owned),
         'contrib_data': len(contributed),
-        'star_data': sum(r['stargazers']['totalCount'] for r in owned),
+        'star_data': sum(r['stargazerCount'] for r in owned),
         'commit_data': commits,
         'follower_data': followers,
         'loc_data': net,
