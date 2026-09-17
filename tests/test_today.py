@@ -70,8 +70,9 @@ class FakeApi:
         self.histories = histories   # {'owner/name': [(author_id, additions, deletions), ...]}
         self.scanned = []
 
-    def commit_history(self, owner, name):
+    def commit_history(self, owner, name, author_id):
         self.scanned.append(f'{owner}/{name}')
+        assert author_id == 'ME'
         yield from self.histories[f'{owner}/{name}']
 
 

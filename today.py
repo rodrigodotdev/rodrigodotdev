@@ -141,7 +141,7 @@ def update_loc_cache(api, owner_id, repos, path):
     """Bring the cache in line with `repos` and return its entries (same order as `repos`).
 
     Only repositories whose commit count differs from the cached one are re-scanned,
-    counting just the commits authored by `owner_id`. The file is rewritten after every
+    fetching just the commits authored by `owner_id`. The file is rewritten after every
     scanned repository so an API failure mid-way keeps the work done so far.
     """
     known = {entry.repo_hash: entry for entry in read_cache(path)}
@@ -153,7 +153,7 @@ def update_loc_cache(api, owner_id, repos, path):
             continue
         owner, name = r['nameWithOwner'].split('/')
         mine = adds = dels = 0
-        for author_id, additions, deletions in api.commit_history(owner, name):
+        for author_id, additions, deletions in api.commit_history(owner, name, owner_id):
             if author_id == owner_id:
                 mine, adds, dels = mine + 1, adds + additions, dels + deletions
         entry.total_commits, entry.my_commits, entry.additions, entry.deletions = total, mine, adds, dels
@@ -167,3 +167,136 @@ def loc_totals(entries):
     adds = sum(e.additions for e in entries)
     dels = sum(e.deletions for e in entries)
     return adds, dels, adds - dels, sum(e.my_commits for e in entries)
+
+
+# ---------- GitHub GraphQL ----------
+
+class GitHubApi:
+    def __init__(self, token, user_name):
+        self.headers = {'authorization': 'token ' + token}
+        self.user_name = user_name
+        self.calls = Counter()
+
+    def query(self, name, query, variables=None):
+        self.calls[name] += 1
+        response = requests.post(GRAPHQL_URL, json={'query': query, 'variables': variables or {}},
+                                 headers=self.headers, timeout=60)
+        if response.status_code == 403:
+            raise RuntimeError(f'{name}: 403 — hit GitHub\'s anti-abuse rate limit, try again later')
+        if response.status_code != 200:
+            raise RuntimeError(f'{name} failed with {response.status_code}: {response.text}')
+        payload = response.json()
+        if payload.get('errors'):
+            raise RuntimeError(f'{name} returned errors: {payload["errors"]}')
+        return payload['data']
+
+    def user_id(self):
+        data = self.query('user_id', '''
+            query($login: String!) { user(login: $login) { id } }''', {'login': self.user_name})
+        return data['user']['id']
+
+    def followers(self):
+        data = self.query('followers', '''
+            query($login: String!) { user(login: $login) { followers { totalCount } } }''',
+            {'login': self.user_name})
+        return data['user']['followers']['totalCount']
+
+    def repositories(self, affiliations):
+        """Every repository for the given ownerAffiliations, 60 per page (bigger pages 502)."""
+        query = '''
+        query($affiliations: [RepositoryAffiliation], $login: String!, $cursor: String) {
+            user(login: $login) {
+                repositories(first: 60, after: $cursor, ownerAffiliations: $affiliations) {
+                    nodes {
+                        nameWithOwner
+                        stargazers { totalCount }
+                        defaultBranchRef { target { ... on Commit { history { totalCount } } } }
+                    }
+                    pageInfo { endCursor hasNextPage }
+                }
+            }
+        }'''
+        nodes, cursor = [], None
+        while True:
+            data = self.query('repositories', query,
+                              {'affiliations': affiliations, 'login': self.user_name, 'cursor': cursor})
+            page = data['user']['repositories']
+            nodes += page['nodes']
+            if not page['pageInfo']['hasNextPage']:
+                return nodes
+            cursor = page['pageInfo']['endCursor']
+
+    def commit_history(self, owner, name, author_id):
+        """Yield (author user id or None, additions, deletions) for the default-branch commits
+        authored by `author_id`. Filtering server-side keeps forks of huge projects cheap."""
+        query = '''
+        query($owner: String!, $name: String!, $author: ID!, $cursor: String) {
+            repository(owner: $owner, name: $name) {
+                defaultBranchRef {
+                    target { ... on Commit {
+                        history(first: 100, after: $cursor, author: {id: $author}) {
+                            nodes { author { user { id } } additions deletions }
+                            pageInfo { endCursor hasNextPage }
+                        }
+                    } }
+                }
+            }
+        }'''
+        cursor = None
+        while True:
+            data = self.query('commit_history', query,
+                              {'owner': owner, 'name': name, 'author': author_id, 'cursor': cursor})
+            ref = data['repository']['defaultBranchRef']
+            if ref is None:
+                return
+            history = ref['target']['history']
+            for node in history['nodes']:
+                user = node['author']['user']
+                yield (user['id'] if user else None), node['additions'], node['deletions']
+            if not history['pageInfo']['hasNextPage']:
+                return
+            cursor = history['pageInfo']['endCursor']
+
+
+# ---------- main ----------
+
+# Reserved leader widths — must match the *_dots layout in the SVG templates.
+RESERVED = {'age_data': 47, 'repo_data': 6, 'contrib_data': 0, 'star_data': 13,
+            'commit_data': 21, 'follower_data': 10, 'loc_data': 9, 'loc_add': 0, 'loc_del': 7}
+
+
+def main():
+    token, user_name = os.environ.get('ACCESS_TOKEN'), os.environ.get('USER_NAME')
+    if not token or not user_name:
+        sys.exit('ACCESS_TOKEN and USER_NAME environment variables are required')
+    started = time.perf_counter()
+    api = GitHubApi(token, user_name)
+
+    owner_id = api.user_id()
+    owned = api.repositories(['OWNER'])
+    contributed = api.repositories(ALL_AFFILIATIONS)
+    followers = api.followers()
+    entries = update_loc_cache(api, owner_id, contributed, cache_path(user_name))
+    adds, dels, net, commits = loc_totals(entries)
+
+    stats = {
+        'age_data': uptime(BIRTHDAY),
+        'repo_data': len(owned),
+        'contrib_data': len(contributed),
+        'star_data': sum(r['stargazers']['totalCount'] for r in owned),
+        'commit_data': commits,
+        'follower_data': followers,
+        'loc_data': net,
+        'loc_add': adds,
+        'loc_del': dels,
+    }
+    for svg in SVG_FILES:
+        update_svg(svg, {key: (value, RESERVED[key]) for key, value in stats.items()})
+
+    for key, value in stats.items():
+        print(f'{key:<14} {format_value(value)}')
+    print(f'GraphQL calls: {sum(api.calls.values())} ({dict(api.calls)}) in {time.perf_counter() - started:.1f}s')
+
+
+if __name__ == '__main__':
+    main()
