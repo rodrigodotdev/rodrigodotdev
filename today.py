@@ -23,6 +23,8 @@ GRAPHQL_URL = 'https://api.github.com/graphql'
 SVG_FILES = ('dark_mode.svg', 'light_mode.svg')
 CACHE_DIR = 'cache'
 ALL_AFFILIATIONS = ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER']
+INFO_WIDTH = 58      # characters per info line in the SVG templates
+RULE_COLUMN = 34     # width of the part before ' | ' on the two-value stats lines
 
 
 # ---------- uptime ----------
@@ -43,26 +45,24 @@ def uptime(birthday, today=None):
 
 # ---------- svg ----------
 
-def leader(just_len):
-    """Dotted leader padding a value to its reserved width."""
-    if just_len <= 0:
+def leader(width):
+    """Dotted leader of exactly `width` characters: ' ', '  ', ' . ', ' .. ', ..."""
+    if width <= 0:
         return ''
-    if just_len == 1:
-        return ' '
-    if just_len == 2:
-        return '. '
-    return ' ' + '.' * just_len + ' '
+    if width <= 2:
+        return ' ' * width
+    return ' ' + '.' * (width - 2) + ' '
 
 
 def format_value(value):
     return f'{value:,}' if isinstance(value, int) else str(value)
 
 
-def justify(root, element_id, value, length=0):
-    """Set #element_id's text and resize #element_id_dots so the value stays right-aligned."""
+def justify(root, element_id, value, width=0):
+    """Set #element_id's text and resize #element_id_dots so leader + value spans `width`."""
     text = format_value(value)
     _set_text(root, element_id, text)
-    _set_text(root, f'{element_id}_dots', leader(length - len(text)))
+    _set_text(root, f'{element_id}_dots', leader(max(1, width - len(text)) if width else 0))
 
 
 def _set_text(root, element_id, text):
@@ -72,12 +72,37 @@ def _set_text(root, element_id, text):
 
 
 def update_svg(path, values):
-    """values: {element_id: (value, reserved_length)} — see RESERVED."""
+    """values: {element_id: (value, field_width)}"""
     tree = etree.parse(path)
     root = tree.getroot()
-    for element_id, (value, length) in values.items():
-        justify(root, element_id, value, length)
+    for element_id, (value, width) in values.items():
+        justify(root, element_id, value, width)
     tree.write(path, encoding='utf-8', xml_declaration=True)
+
+
+def field_widths(stats):
+    """Width (leader + value) of each dynamic field so every info line is INFO_WIDTH wide.
+
+    The label strings mirror the SVG templates; fields with width 0 have no leader.
+    """
+    contrib, adds, dels = (format_value(stats[key]) for key in ('contrib_data', 'loc_add', 'loc_del'))
+    return {
+        'age_data': INFO_WIDTH - len('. Uptime:'),
+        'repo_data': RULE_COLUMN - len('. Repos:') - len(' {Contributed: ') - len(contrib) - len('}'),
+        'contrib_data': 0,
+        'star_data': INFO_WIDTH - RULE_COLUMN - len(' | Stars:'),
+        'commit_data': RULE_COLUMN - len('. Commits:'),
+        'follower_data': INFO_WIDTH - RULE_COLUMN - len(' | Followers:'),
+        'loc_data': INFO_WIDTH - len('. Lines of Code:') - len(f' ( {adds}++, {dels}-- )'),
+        'loc_add': 0,
+        'loc_del': 0,
+    }
+
+
+def fill(path, stats):
+    """Write every stat into the SVG at `path`, keeping the info lines aligned."""
+    widths = field_widths(stats)
+    update_svg(path, {key: (value, widths[key]) for key, value in stats.items()})
 
 
 # ---------- lines-of-code cache ----------
@@ -260,11 +285,6 @@ class GitHubApi:
 
 # ---------- main ----------
 
-# Reserved leader widths — must match the *_dots layout in the SVG templates.
-RESERVED = {'age_data': 47, 'repo_data': 6, 'contrib_data': 0, 'star_data': 13,
-            'commit_data': 21, 'follower_data': 10, 'loc_data': 9, 'loc_add': 0, 'loc_del': 7}
-
-
 def main():
     token, user_name = os.environ.get('ACCESS_TOKEN'), os.environ.get('USER_NAME')
     if not token or not user_name:
@@ -291,7 +311,7 @@ def main():
         'loc_del': dels,
     }
     for svg in SVG_FILES:
-        update_svg(svg, {key: (value, RESERVED[key]) for key, value in stats.items()})
+        fill(svg, stats)
 
     for key, value in stats.items():
         print(f'{key:<14} {format_value(value)}')

@@ -1,5 +1,6 @@
 import datetime
 import os
+import shutil
 import sys
 
 import pytest
@@ -27,11 +28,11 @@ def test_uptime_birthday_cake():
 
 # ---------- svg ----------
 
-@pytest.mark.parametrize('just_len, expected', [
-    (0, ''), (1, ' '), (2, '. '), (3, ' ... '), (8, ' ........ '),
+@pytest.mark.parametrize('width, expected', [
+    (-1, ''), (0, ''), (1, ' '), (2, '  '), (3, ' . '), (8, ' ...... '),
 ])
-def test_leader(just_len, expected):
-    assert today.leader(just_len) == expected
+def test_leader_has_exactly_the_requested_width(width, expected):
+    assert today.leader(width) == expected
 
 
 def test_format_value():
@@ -51,7 +52,7 @@ def test_update_svg_sets_values_and_leaders(tmp_path):
     today.update_svg(str(path), {'star_data': (1234, 13), 'loc_add': (5, 0)})
     root = etree.parse(str(path)).getroot()
     assert root.find(".//*[@id='star_data']").text == '1,234'
-    assert root.find(".//*[@id='star_data_dots']").text == ' ........ '   # 13 - len('1,234') = 8 dots
+    assert root.find(".//*[@id='star_data_dots']").text == ' ...... '   # 13 - len('1,234') = 8 chars
     assert root.find(".//*[@id='loc_add']").text == '5'
 
 
@@ -123,3 +124,31 @@ def test_read_cache_ignores_comments_and_missing_file(tmp_path):
     assert today.read_cache(str(path)) == []
     path.write_text('# comment\n\n' + 'a' * 64 + ' 3 2 10 4\n', encoding='utf-8')
     assert today.read_cache(str(path)) == [today.CacheEntry('a' * 64, 3, 2, 10, 4)]
+
+
+# ---------- card layout ----------
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+STATS = {'age_data': '25 years, 0 months, 5 days', 'repo_data': 16, 'contrib_data': 17, 'star_data': 13,
+         'commit_data': 292, 'follower_data': 11, 'loc_data': 155180, 'loc_add': 173453, 'loc_del': 18273}
+BIG_STATS = {'age_data': '25 years, 11 months, 30 days', 'repo_data': 1234, 'contrib_data': 100, 'star_data': 9,
+             'commit_data': 12345, 'follower_data': 1000, 'loc_data': 1234567, 'loc_add': 2345678, 'loc_del': 111111}
+
+
+def info_rows(path):
+    root = etree.parse(str(path)).getroot()
+    text = root.find(".//*[@class='info']")
+    return [''.join(row.itertext()) for row in text]
+
+
+@pytest.mark.parametrize('stats', [STATS, BIG_STATS])
+@pytest.mark.parametrize('svg', today.SVG_FILES)
+def test_every_info_row_is_the_same_width(tmp_path, svg, stats):
+    path = tmp_path / svg
+    shutil.copy(os.path.join(REPO_ROOT, svg), path)
+    today.fill(str(path), stats)
+    rows = info_rows(path)
+    assert len(rows) == 26                       # 28 layout rows minus the 2 empty ones before section titles
+    assert all(len(row) == today.INFO_WIDTH for row in rows if row != '. '), [(len(r), r) for r in rows]
+    assert all(row.index('|') == today.RULE_COLUMN + 1 for row in rows if '|' in row)
