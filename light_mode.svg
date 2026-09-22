@@ -43,7 +43,7 @@ text, tspan {white-space: pre;}
 <text x="410" y="30" class="info">
 <tspan x="410" y="30"><tspan class="hd">rodrigo@melo</tspan><tspan class="cc"> -—————————————————————————————————————————-—-</tspan></tspan>
 <tspan x="410" y="50"><tspan class="cc">. </tspan><tspan class="key">OS</tspan>:<tspan class="cc"> ...................... </tspan><tspan class="value">Windows 11, WSL2 (Arch Linux)</tspan></tspan>
-<tspan x="410" y="70"><tspan class="cc">. </tspan><tspan class="key">Uptime</tspan>:<tspan class="cc" id="age_data_dots"> .................... </tspan><tspan class="value" id="age_data">25 years, 0 months, 10 days</tspan></tspan>
+<tspan x="410" y="70"><tspan class="cc">. </tspan><tspan class="key">Uptime</tspan>:<tspan class="cc" id="age_data_dots"> .................... </tspan><tspan class="value" id="age_data">25 years, 0 months, 11 days</tspan></tspan>
 <tspan x="410" y="90"><tspan class="cc">. </tspan><tspan class="key">Host</tspan>:<tspan class="cc"> ............................................. </tspan><tspan class="value">Gupy</tspan></tspan>
 <tspan x="410" y="110"><tspan class="cc">. </tspan><tspan class="key">Kernel</tspan>:<tspan class="cc"> .............................. </tspan><tspan class="value">Software Engineer</tspan></tspan>
 <tspan x="410" y="130"><tspan class="cc">. </tspan><tspan class="key">IDE</tspan>:<tspan class="cc"> .................................... </tspan><tspan class="value">VSCode, Neovim</tspan></tspan>
